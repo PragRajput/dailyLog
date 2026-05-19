@@ -27,4 +27,7 @@ const taskSchema = new Schema<ITask>(
   { timestamps: true }
 );
 
+taskSchema.index({ userId: 1, completed: 1 });
+taskSchema.index({ userId: 1, dueDate: 1 });
+
 export const Task: Model<ITask> = mongoose.model<ITask>('Task', taskSchema);
