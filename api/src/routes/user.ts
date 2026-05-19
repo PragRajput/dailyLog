@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
 import { requireAuth } from '../middleware/requireAuth';
-import User from '../models/User';
+import { User } from '../models/User';
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
