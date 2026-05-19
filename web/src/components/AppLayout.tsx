@@ -55,12 +55,10 @@ export default function AppLayout({ user: initialUser, children }: { user: User;
   const [toast,     setToast]     = useState(false);
   const [user,      setUser]      = useState(initialUser);
   const [dropdown,  setDropdown]  = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [editName,  setEditName]  = useState(false);
   const [nameVal,   setNameVal]   = useState(user.name);
   const [savingName, setSavingName] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef  = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -92,17 +90,6 @@ export default function AppLayout({ user: initialUser, children }: { user: User;
   }, [editName]);
 
   const logout = async () => { sessionStorage.removeItem('greeted'); await api.logout(); router.push('/login'); };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const { avatar } = await api.uploadAvatar(file);
-      setUser((u) => ({ ...u, avatar }));
-    } catch { /* silently ignore */ }
-    finally { setUploading(false); e.target.value = ''; }
-  };
 
   const saveName = async () => {
     if (!nameVal.trim() || nameVal.trim() === user.name) { setEditName(false); return; }
@@ -194,7 +181,7 @@ export default function AppLayout({ user: initialUser, children }: { user: User;
             onMouseEnter={(e) => { if (!dropdown) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.12)'; } }}
             onMouseLeave={(e) => { if (!dropdown) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'; } }}
           >
-            <Avatar src={user.avatar} name={user.name} size={28} dim={uploading} />
+            <Avatar src={user.avatar} name={user.name} size={28} />
             <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#e2e8f0', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user.name}
             </span>
@@ -224,23 +211,7 @@ export default function AppLayout({ user: initialUser, children }: { user: User;
                 borderBottom: '1px solid rgba(255,255,255,0.06)',
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
               }}>
-                {/* Avatar + upload overlay */}
-                <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => fileInputRef.current?.click()}>
-                  <Avatar src={user.avatar} name={user.name} size={56} dim={uploading} />
-                  <div style={{
-                    position: 'absolute', inset: 0, borderRadius: '50%',
-                    background: 'rgba(0,0,0,0.55)',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '0.58rem', color: '#fff', gap: 1,
-                    opacity: uploading ? 1 : 0, transition: 'opacity 0.15s',
-                  }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.opacity = '1')}
-                  onMouseLeave={(e) => { if (!uploading) (e.currentTarget as HTMLElement).style.opacity = '0'; }}
-                  >
-                    <span style={{ fontSize: '0.9rem' }}>{uploading ? '…' : '✎'}</span>
-                    {!uploading && <span style={{ letterSpacing: '0.04em' }}>Change</span>}
-                  </div>
-                </div>
+                <Avatar src={user.avatar} name={user.name} size={56} />
 
                 {/* Name (editable) */}
                 {editName ? (
@@ -304,22 +275,6 @@ export default function AppLayout({ user: initialUser, children }: { user: User;
               {/* Actions */}
               <div style={{ padding: '0 18px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <button
-                  onClick={() => { fileInputRef.current?.click(); setDropdown(false); }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 9,
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.07)',
-                    borderRadius: 9, padding: '9px 12px',
-                    color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem',
-                    cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(245,158,11,0.07)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(245,158,11,0.18)'; (e.currentTarget as HTMLElement).style.color = '#f59e0b'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'; (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.5)'; }}
-                >
-                  <span style={{ fontSize: '0.85rem' }}>✎</span> Change profile photo
-                </button>
-
-                <button
                   onClick={logout}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 9,
@@ -379,15 +334,6 @@ export default function AppLayout({ user: initialUser, children }: { user: User;
           {children}
         </main>
       </div>
-
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        style={{ display: 'none' }}
-        onChange={handleFileChange}
-      />
 
       {/* ── Floating Chat Widget ── */}
       <ChatWidget />

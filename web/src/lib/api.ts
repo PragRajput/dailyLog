@@ -62,19 +62,4 @@ export const api = {
   updateName: (name: string) =>
     req<{ name: string }>('/api/user/name', { method: 'PATCH', body: JSON.stringify({ name }) }),
 
-  uploadAvatar: (file: File): Promise<{ avatar: string }> => {
-    const form = new FormData();
-    form.append('avatar', file);
-    return fetch(`${API}/api/user/avatar`, {
-      method: 'POST',
-      credentials: 'include',
-      body: form,
-    }).then(async (res) => {
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(body.error || `HTTP ${res.status}`);
-      }
-      return res.json();
-    });
-  },
 };
