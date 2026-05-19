@@ -16,6 +16,8 @@ import tasksRouter    from './routes/tasks';
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 mongoose
   .connect(process.env.MONGODB_URI!)
   .then(() => console.log('MongoDB connected'))
