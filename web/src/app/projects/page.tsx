@@ -4,13 +4,15 @@ import AppLayout from '@/components/AppLayout';
 import Loader from '@/components/Loader';
 import { useUser } from '@/lib/useUser';
 import { api } from '@/lib/api';
+import { useProjects, useInvalidate } from '@/lib/queries';
 import type { Project } from '@/lib/types';
 
 const PALETTE = ['#3b82f6','#22c55e','#a855f7','#f97316','#ef4444','#eab308','#ec4899','#14b8a6'];
 
 export default function ProjectsPage() {
   const { user, loading } = useUser();
-  const [projects,       setProjects]       = useState<Project[]>([]);
+  const { data: projects = [], isLoading: projLoading } = useProjects();
+  const { invalidateProjects } = useInvalidate();
   const [tab,            setTab]            = useState<'active' | 'archived'>('active');
   const [showModal,      setShowModal]      = useState(false);
   const [confirmDelete,  setConfirmDelete]  = useState<Project | null>(null);
@@ -22,8 +24,6 @@ export default function ProjectsPage() {
   const [error,          setError]          = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { if (user) api.getProjects().then(setProjects); }, [user]);
-
   useEffect(() => {
     if (showModal) setTimeout(() => inputRef.current?.focus(), 50);
     else { setName(''); setColor(PALETTE[0]); setError(''); }
@@ -33,8 +33,8 @@ export default function ProjectsPage() {
     if (!name.trim()) return;
     setSaving(true); setError('');
     try {
-      const p = await api.createProject({ name: name.trim(), color });
-      setProjects((prev) => [p, ...prev]);
+      await api.createProject({ name: name.trim(), color });
+      invalidateProjects();
       setShowModal(false);
     } catch (e) { setError((e as Error).message); }
     finally { setSaving(false); }
@@ -42,8 +42,8 @@ export default function ProjectsPage() {
 
   const archive = async (id: string, archived: boolean) => {
     try {
-      const updated = await api.archiveProject(id, archived);
-      setProjects((prev) => prev.map((p) => p._id === id ? updated : p));
+      await api.archiveProject(id, archived);
+      invalidateProjects();
     } catch (e) { setError((e as Error).message); }
   };
 
@@ -52,13 +52,13 @@ export default function ProjectsPage() {
     setDeleting(true); setDeleteError('');
     try {
       await api.deleteProject(confirmDelete._id);
-      setProjects((prev) => prev.filter((p) => p._id !== confirmDelete._id));
+      invalidateProjects();
       setConfirmDelete(null);
     } catch (e) { setDeleteError((e as Error).message); }
     finally { setDeleting(false); }
   };
 
-  if (loading || !user) return <Loader />;
+  if (loading || !user || projLoading) return <Loader />;
 
   const active   = projects.filter((p) => !p.archived);
   const archived = projects.filter((p) =>  p.archived);

@@ -1,10 +1,11 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import Loader from '@/components/Loader';
 import { useUser } from '@/lib/useUser';
 import { api } from '@/lib/api';
-import type { CalendarData, Entry, Task } from '@/lib/types';
+import { useCalendar, useTasks, useInvalidate } from '@/lib/queries';
+import type { Entry, Task } from '@/lib/types';
 
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS = ['January','February','March','April','May','June',
@@ -38,13 +39,12 @@ export default function CalendarPage() {
   const now = new Date();
   const [year,     setYear]    = useState(now.getFullYear());
   const [month,    setMonth]   = useState(now.getMonth() + 1);
-  const [data,     setData]    = useState<CalendarData>({});
-  const [tasks,    setTasks]   = useState<Task[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [mode,     setMode]    = useState<'entries'|'tasks'>('entries');
 
-  useEffect(() => { if (user) api.getCalendar(year, month).then(setData); }, [user, year, month]);
-  useEffect(() => { if (user) api.getTasks().then(setTasks); }, [user]);
+  const { data = {},   isLoading: calLoading }  = useCalendar(year, month);
+  const { data: tasks = [], isLoading: tasksLoading } = useTasks();
+  const { invalidateTasks } = useInvalidate();
 
   const prev = () => { if (month === 1) { setYear(y => y - 1); setMonth(12); } else setMonth(m => m - 1); };
   const next = () => { if (month === 12) { setYear(y => y + 1); setMonth(1); } else setMonth(m => m + 1); };
@@ -67,10 +67,10 @@ export default function CalendarPage() {
 
   async function toggleTask(id: string, completed: boolean) {
     await api.updateTask(id, { completed });
-    setTasks(prev => prev.map(t => t._id === id ? { ...t, completed, completedAt: completed ? new Date().toISOString() : undefined } : t));
+    invalidateTasks();
   }
 
-  if (loading || !user) return <Loader />;
+  if (loading || !user || calLoading || tasksLoading) return <Loader />;
 
   return (
     <AppLayout user={user}>

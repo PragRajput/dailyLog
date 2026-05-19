@@ -1,9 +1,10 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import Loader from '@/components/Loader';
 import { useUser } from '@/lib/useUser';
 import { api } from '@/lib/api';
+import { useTasks, useProjects, useInvalidate } from '@/lib/queries';
 import type { Task, Project, Entry } from '@/lib/types';
 
 const PRIORITY_META = {
@@ -64,8 +65,9 @@ function ProjectPicker({ projects, value, onChange }: { projects: Project[]; val
 
 export default function TasksPage() {
   const { user, loading } = useUser();
-  const [tasks,        setTasks]        = useState<Task[]>([]);
-  const [projects,     setProjects]     = useState<Project[]>([]);
+  const { data: tasks = [],    isLoading: tasksLoading }    = useTasks();
+  const { data: projects = [], isLoading: projectsLoading }                           = useProjects();
+  const { invalidateTasks } = useInvalidate();
 
   // Create form
   const [title,      setTitle]      = useState('');
@@ -100,33 +102,25 @@ export default function TasksPage() {
   const [filter,     setFilter]     = useState<'all'|'pending'|'done'>('pending');
   const [projFilter, setProjFilter] = useState<string>('');
 
-  useEffect(() => {
-    if (user) {
-      Promise.all([api.getTasks(), api.getProjects()]).then(([t, p]) => {
-        setTasks(t); setProjects(p);
-      });
-    }
-  }, [user]);
-
   const create = async () => {
     if (!title.trim()) return;
     setSaving(true); setError('');
     try {
-      const t = await api.createTask({ title: title.trim(), description: desc.trim() || undefined, dueDate: dueDate || undefined, priority, projectId: projectId || undefined });
-      setTasks((prev) => [t, ...prev]);
+      await api.createTask({ title: title.trim(), description: desc.trim() || undefined, dueDate: dueDate || undefined, priority, projectId: projectId || undefined });
+      invalidateTasks();
       setTitle(''); setDesc(''); setDueDate(''); setPriority('medium'); setProjectId(''); setShowForm(false);
     } catch (e) { setError((e as Error).message); }
     finally { setSaving(false); }
   };
 
   const toggle = async (task: Task) => {
-    const updated = await api.updateTask(task._id, { completed: !task.completed });
-    setTasks((prev) => prev.map((t) => t._id === task._id ? updated : t));
+    await api.updateTask(task._id, { completed: !task.completed });
+    invalidateTasks();
   };
 
   const remove = async (id: string) => {
     await api.deleteTask(id);
-    setTasks((prev) => prev.filter((t) => t._id !== id));
+    invalidateTasks();
     if (editingId === id) setEditingId(null);
     if (entriesTask?._id === id) {
       setEntriesTask(null);
@@ -174,13 +168,13 @@ export default function TasksPage() {
         priority:    editPriority,
         projectId:   editProjId || null,
       });
-      setTasks((prev) => prev.map((t) => t._id === editingId ? updated : t));
+      invalidateTasks();
       setEditingId(null);
     } catch { /* silent */ }
     finally { setEditSaving(false); }
   };
 
-  if (loading || !user) return <Loader />;
+  if (loading || !user || tasksLoading || projectsLoading) return <Loader />;
 
   const pending  = tasks.filter((t) => !t.completed);
   const done     = tasks.filter((t) => t.completed);
