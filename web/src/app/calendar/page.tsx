@@ -229,9 +229,16 @@ export default function CalendarPage() {
                         background: e.projectId?.color || '#888',
                         boxShadow: `0 0 6px ${e.projectId?.color || '#888'}88`,
                       }} />
-                      <div>
-                        <div style={{ fontSize: '0.68rem', fontWeight: 800, marginBottom: 3, color: e.projectId?.color || '#888', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                          {e.projectId?.name}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                          <div style={{ fontSize: '0.68rem', fontWeight: 800, color: e.projectId?.color || '#888', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                            {e.projectId?.name}
+                          </div>
+                          {e.hours != null && e.hours > 0 && (
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b', whiteSpace: 'nowrap' }}>
+                              ⏱ {e.hours}h
+                            </span>
+                          )}
                         </div>
                         <div style={{ fontSize: '0.875rem', color: '#cbd5e1', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{e.description}</div>
                       </div>
