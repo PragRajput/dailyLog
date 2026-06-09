@@ -97,6 +97,7 @@ export default function TasksPage() {
   const [editPriority, setEditPriority] = useState<'low'|'medium'|'high'>('medium');
   const [editProjId,   setEditProjId]   = useState('');
   const [editSaving,   setEditSaving]   = useState(false);
+  const [togglingId,   setTogglingId]   = useState<string | null>(null);
 
   // Filters
   const [filter,     setFilter]     = useState<'all'|'pending'|'done'>('pending');
@@ -114,8 +115,13 @@ export default function TasksPage() {
   };
 
   const toggle = async (task: Task) => {
-    await api.updateTask(task._id, { completed: !task.completed });
-    invalidateTasks();
+    setTogglingId(task._id);
+    try {
+      await api.updateTask(task._id, { completed: !task.completed });
+      invalidateTasks();
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const remove = async (id: string) => {
@@ -351,14 +357,26 @@ export default function TasksPage() {
                 <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                   <div style={{ width: 3, flexShrink: 0, alignSelf: 'stretch', background: stripe, opacity: 0.75 }} />
 
-                  <button onClick={() => toggle(task)} style={{
+                  <button onClick={() => togglingId ? undefined : toggle(task)} style={{
                     flexShrink: 0, margin: '14px 12px 0 12px',
                     width: 18, height: 18, borderRadius: 5,
                     background: task.completed ? 'rgba(34,197,94,0.15)' : 'transparent',
                     border: `2px solid ${task.completed ? '#22c55e' : 'rgba(255,255,255,0.2)'}`,
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: togglingId === task._id ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '0.65rem', color: '#22c55e', transition: 'all 0.15s', padding: 0,
-                  }}>{task.completed ? '✓' : ''}</button>
+                    opacity: togglingId === task._id ? 0.6 : 1,
+                  }}>
+                    {togglingId === task._id ? (
+                      <span style={{
+                        width: 10, height: 10, borderRadius: '50%',
+                        border: '1.5px solid rgba(34,197,94,0.3)',
+                        borderTopColor: '#22c55e',
+                        display: 'inline-block',
+                        animation: 'spin 0.6s linear infinite',
+                      }} />
+                    ) : task.completed ? '✓' : ''}
+                  </button>
 
                   <div style={{ flex: 1, padding: '12px 10px 12px 0' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>

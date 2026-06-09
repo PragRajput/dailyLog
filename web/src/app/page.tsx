@@ -73,11 +73,12 @@ export default function TodayPage() {
   const [projects,    setProjects]    = useState<Project[]>([]);
   const [entries,     setEntries]     = useState<Entry[]>([]);
   const [todayTasks,  setTodayTasks]  = useState<Task[]>([]);
-  const [description, setDescription] = useState('');
-  const [hours,       setHours]       = useState('');
-  const [projectId,   setProjectId]   = useState('');
-  const [saving,      setSaving]      = useState(false);
-  const [error,       setError]       = useState('');
+  const [description,   setDescription]   = useState('');
+  const [hours,         setHours]         = useState('');
+  const [selectedDate,  setSelectedDate]  = useState('');
+  const [projectId,     setProjectId]     = useState('');
+  const [saving,        setSaving]        = useState(false);
+  const [error,         setError]         = useState('');
 
   // Entry edit state
   const [editEntryId,     setEditEntryId]     = useState<string | null>(null);
@@ -118,31 +119,46 @@ export default function TodayPage() {
   const [adHocError,  setAdHocError]  = useState('');
 
   const today = todayLocal();
-  const dateLabel = new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const activeDate = selectedDate || today;
+  const dateLabel = new Date(activeDate + 'T00:00:00').toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const isToday = activeDate === today;
+
+  const goToPrevDay = () => {
+    const d = new Date(activeDate + 'T00:00:00');
+    d.setDate(d.getDate() - 1);
+    setSelectedDate(d.toLocaleDateString('sv'));
+  };
+  const goToNextDay = () => {
+    if (isToday) return;
+    const d = new Date(activeDate + 'T00:00:00');
+    d.setDate(d.getDate() + 1);
+    const next = d.toLocaleDateString('sv');
+    setSelectedDate(next === today ? '' : next);
+  };
 
   const load = useCallback(async () => {
     const [p, e, t] = await Promise.all([
       api.getProjects(),
-      api.getEntries({ date: today }),
+      api.getEntries({ date: activeDate }),
       api.getTasks(),
     ]);
     setProjects(p);
     setEntries(e);
     setTodayTasks(t.filter((tk) => !tk.completed && Boolean(tk.dueDate)));
     if (p.length) setProjectId((id) => id || p[0]._id);
-  }, [today]);
+  }, [activeDate]);
 
   useEffect(() => { if (user) load(); }, [user, load]);
 
-  // Load quick notes for today from localStorage
+  // Load quick notes for active date from localStorage
   useEffect(() => {
-    const raw = localStorage.getItem(`quicknotes-${today}`);
+    const raw = localStorage.getItem(`quicknotes-${activeDate}`);
     setQuickNotes(raw ? JSON.parse(raw) : []);
-  }, [today]);
+  }, [activeDate]);
 
   const saveQuickNotes = (notes: QuickNote[]) => {
     setQuickNotes(notes);
-    localStorage.setItem(`quicknotes-${today}`, JSON.stringify(notes));
+    localStorage.setItem(`quicknotes-${activeDate}`, JSON.stringify(notes));
   };
 
   const addQuickNote = () => {
@@ -173,7 +189,7 @@ export default function TodayPage() {
       }
       const parsedHours = parseFloat(adHocHours);
       const entry = await api.createEntry({
-        projectId: proj._id, date: today, description: adHocDesc.trim(),
+        projectId: proj._id, date: activeDate, description: adHocDesc.trim(),
         hours: !isNaN(parsedHours) && parsedHours > 0 ? parsedHours : null,
       });
       setEntries((prev) => [entry, ...prev]);
@@ -192,7 +208,7 @@ export default function TodayPage() {
     try {
       const parsedHours = parseFloat(hours);
       const entry = await api.createEntry({
-        projectId, date: today, description: description.trim(),
+        projectId, date: activeDate, description: description.trim(),
         hours: !isNaN(parsedHours) && parsedHours > 0 ? parsedHours : null,
       });
       setEntries((prev) => [entry, ...prev]);
@@ -323,17 +339,42 @@ export default function TodayPage() {
               <motion.span
                 animate={{ opacity: [0.4, 1, 0.4] }}
                 transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-                style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: '#f59e0b' }}
+                style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: isToday ? '#f59e0b' : '#94a3b8' }}
               />
-              Today
+              {isToday ? 'Today' : 'Past Day'}
             </div>
-            <h1 style={{
-              fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 6px',
-              background: 'linear-gradient(90deg, #f1f5f9 0%, #94a3b8 40%, #f59e0b 100%)',
-              backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-            }}>
-              {dateLabel}
-            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <motion.button onClick={goToPrevDay}
+                whileHover={{ scale: 1.1, color: '#f1f5f9' }} whileTap={{ scale: 0.9 }}
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', color: 'rgba(255,255,255,0.3)', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >‹</motion.button>
+
+              <h1 style={{
+                fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 6px',
+                ...(isToday ? {
+                  background: 'linear-gradient(90deg, #f1f5f9 0%, #94a3b8 40%, #f59e0b 100%)',
+                  backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                } : {
+                  color: '#94a3b8',
+                }),
+              }}>
+                {dateLabel}
+              </h1>
+
+              <motion.button onClick={goToNextDay}
+                whileHover={!isToday ? { scale: 1.1, color: '#f1f5f9' } : {}}
+                whileTap={!isToday ? { scale: 0.9 } : {}}
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, width: 30, height: 30, cursor: isToday ? 'not-allowed' : 'pointer', color: isToday ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >›</motion.button>
+
+              {!isToday && (
+                <motion.button onClick={() => setSelectedDate('')}
+                  initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }}
+                  whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                  style={{ fontSize: '0.68rem', fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)', color: '#f59e0b', cursor: 'pointer' }}
+                >Back to today</motion.button>
+              )}
+            </div>
           </div>
           <AnimatePresence>
             {(entries.length > 0 || todayTasks.length > 0) && (
@@ -463,6 +504,7 @@ export default function TodayPage() {
                           }}
                         />
                       </div>
+
                     </div>
                     <AnimatePresence>
                       {showEmojiPicker && (

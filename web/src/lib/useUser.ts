@@ -1,24 +1,23 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { api } from './api';
 import type { User } from './types';
 
 export function useUser() {
-  const [user, setUser]       = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    api.me()
-      .then((data) => {
-        if (!data) router.push('/login');
-        else setUser(data);
-      })
-      .catch(() => router.push('/login'))
-      .finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { data: user, isLoading: loading } = useQuery<User | null>({
+    queryKey: ['me'],
+    queryFn:  api.me,
+    staleTime: 5 * 60 * 1000, // cache user for 5 minutes
+    retry: false,
+  });
 
-  return { user, loading };
+  useEffect(() => {
+    if (!loading && !user) router.push('/login');
+  }, [loading, user, router]);
+
+  return { user: user ?? null, loading };
 }
