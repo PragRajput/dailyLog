@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import AppLayout from '@/components/AppLayout';
 import Loader from '@/components/Loader';
+import Portal from '@/components/Portal';
 import { useUser } from '@/lib/useUser';
 import { api } from '@/lib/api';
 import { useProjects, useTasks, useInvalidate } from '@/lib/queries';
@@ -12,9 +13,6 @@ import type { Entry, Task } from '@/lib/types';
 function todayLocal() { return new Date().toLocaleDateString('sv'); }
 function formatDate(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-function shortDate(d: string) {
-  return new Date(d + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' });
 }
 /** Whole days from `from` to `to` (both YYYY-MM-DD). */
 function dayDiff(from: string, to: string) {
@@ -69,18 +67,6 @@ const listVariants = { show: { transition: { staggerChildren: 0.06 } } };
 const itemVariants = {
   hidden: { opacity: 0, y: 10 },
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 300, damping: 30 } },
-};
-
-const modalVariants = {
-  hidden: { opacity: 0, scale: 0.95, y: 8 },
-  show:   { opacity: 1, scale: 1,    y: 0, transition: { type: 'spring' as const, stiffness: 350, damping: 30 } },
-  exit:   { opacity: 0, scale: 0.95, y: 8, transition: { duration: 0.15 } },
-};
-
-const backdropVariants = {
-  hidden: { opacity: 0 },
-  show:   { opacity: 1 },
-  exit:   { opacity: 0, transition: { duration: 0.2 } },
 };
 
 function Card({ children, delay = 0, style }: { children: React.ReactNode; delay?: number; style?: React.CSSProperties }) {
@@ -296,16 +282,152 @@ function ProjectSelect({ projects, value, onChange, placeholder = 'Select a proj
   );
 }
 
-function TaskGroup({ label, count, color, children }: { label: string; count: number; color: string; children: React.ReactNode }) {
+/** Optional task picker, scoped to the selected project's incomplete tasks. */
+function TaskSelect({ tasks, value, onChange, onCreateNew, disabled }: {
+  tasks: { _id: string; title: string; priority: 'low' | 'medium' | 'high' }[];
+  value: string;
+  onChange: (id: string) => void;
+  onCreateNew: () => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos,  setPos]  = useState<{ top: number; left: number; width: number; up: boolean } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef   = useRef<HTMLDivElement>(null);
+
+  const sel = tasks.find((t) => t._id === value);
+
+  const measure = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom;
+    const up    = below < DROPDOWN_MAX_H && r.top > below;
+    setPos({ top: up ? r.top - 6 : r.bottom + 6, left: r.left, width: r.width, up });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    measure();
+    window.addEventListener('scroll', measure, true);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('scroll', measure, true);
+      window.removeEventListener('resize', measure);
+    };
+  }, [open, measure]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const pick = (id: string) => { onChange(id); setOpen(false); };
+
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-        <span style={{ width: 5, height: 5, borderRadius: '50%', background: color, boxShadow: `0 0 6px ${color}` }} />
-        <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color }}>{label}</span>
-        <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'rgba(255,255,255,0.22)' }}>{count}</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>{children}</div>
-    </div>
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((v) => !v)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 9,
+          background: 'rgba(255,255,255,0.04)',
+          border: `1px solid ${open ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.08)'}`,
+          borderRadius: 10, padding: '9px 12px', cursor: disabled ? 'not-allowed' : 'pointer',
+          fontFamily: 'inherit', textAlign: 'left', transition: 'border-color 0.15s', opacity: disabled ? 0.5 : 1,
+        }}
+      >
+        <span style={{ flexShrink: 0, fontSize: '0.7rem', color: sel ? PRIORITY_COLOR[sel.priority] : 'rgba(255,255,255,0.25)' }}>✓</span>
+        <span style={{
+          flex: 1, minWidth: 0, fontSize: '0.82rem', fontWeight: sel ? 700 : 500,
+          color: sel ? '#e2e8f0' : 'rgba(255,255,255,0.4)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {sel ? sel.title : 'Link a task (optional)'}
+        </span>
+        <span style={{ flexShrink: 0, fontSize: '0.55rem', color: 'rgba(255,255,255,0.3)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
+      </button>
+
+      {open && pos && createPortal(
+        <motion.div
+          ref={panelRef}
+          initial={{ opacity: 0, y: pos.up ? 4 : -4 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.14, ease: 'easeOut' }}
+          style={{
+            position: 'fixed', top: pos.top, left: pos.left, width: pos.width,
+            transform: pos.up ? 'translateY(-100%)' : undefined,
+            zIndex: 2000,
+            background: 'rgba(13,15,28,0.98)', backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10,
+            boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
+          }}
+        >
+          <div style={{ maxHeight: DROPDOWN_MAX_H, overflowY: 'auto', padding: 5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <motion.button
+              type="button" onClick={() => pick('')}
+              whileHover={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                padding: '7px 9px', borderRadius: 7, cursor: 'pointer',
+                background: !value ? 'rgba(255,255,255,0.06)' : 'transparent',
+                border: 'none', textAlign: 'left', fontFamily: 'inherit',
+                fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', fontStyle: 'italic',
+              }}
+            >
+              No task
+            </motion.button>
+            {tasks.map((t) => {
+              const active = t._id === value;
+              const c = PRIORITY_COLOR[t.priority];
+              return (
+                <motion.button
+                  key={t._id} type="button" onClick={() => pick(t._id)}
+                  whileHover={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                    padding: '7px 9px', borderRadius: 7, cursor: 'pointer',
+                    background: active ? c + '18' : 'transparent',
+                    border: 'none', textAlign: 'left', fontFamily: 'inherit',
+                  }}
+                >
+                  <span style={{ width: 7, height: 7, borderRadius: 2, background: c, flexShrink: 0 }} />
+                  <span style={{
+                    flex: 1, minWidth: 0, fontSize: '0.8rem',
+                    fontWeight: active ? 700 : 500,
+                    color: active ? '#f1f5f9' : '#cbd5e1',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{t.title}</span>
+                  {active && <span style={{ fontSize: '0.7rem', color: c, flexShrink: 0 }}>✓</span>}
+                </motion.button>
+              );
+            })}
+
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '4px 2px' }} />
+            <motion.button
+              type="button" onClick={() => { setOpen(false); onCreateNew(); }}
+              whileHover={{ backgroundColor: 'rgba(245,158,11,0.1)' }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                padding: '7px 9px', borderRadius: 7, cursor: 'pointer',
+                background: 'transparent', border: 'none', textAlign: 'left', fontFamily: 'inherit',
+                fontSize: '0.8rem', fontWeight: 700, color: '#f59e0b',
+              }}
+            >
+              <span style={{ fontSize: '0.9rem', lineHeight: 1 }}>+</span> Create new task
+            </motion.button>
+          </div>
+        </motion.div>,
+        document.body
+      )}
+    </>
   );
 }
 
@@ -320,8 +442,16 @@ export default function TodayPage() {
   const [hours,         setHours]         = useState('');
   const [selectedDate,  setSelectedDate]  = useState('');
   const [projectId,     setProjectId]     = useState('');
+  const [taskId,        setTaskId]        = useState('');
   const [saving,        setSaving]        = useState(false);
   const [error,         setError]         = useState('');
+
+  // Create-task modal (from the log form task picker)
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [newTaskTitle,  setNewTaskTitle]  = useState('');
+  const [newTaskDesc,   setNewTaskDesc]   = useState('');
+  const [taskSaving,    setTaskSaving]    = useState(false);
+  const [taskError,     setTaskError]     = useState('');
 
   // Entry edit state
   const [editEntryId,     setEditEntryId]     = useState<string | null>(null);
@@ -330,21 +460,7 @@ export default function TodayPage() {
   const [editEntryHours,  setEditEntryHours]  = useState('');
   const [editEntrySaving, setEditEntrySaving] = useState(false);
 
-  // Completion modal
-  const [completingTask,    setCompletingTask]   = useState<Task | null>(null);
-  const [completionNote,    setCompletionNote]   = useState('');
-  const [completionHours,   setCompletionHours]  = useState('');
-  const [completionProjId,  setCompletionProjId] = useState('');
-  const [completionSaving,  setCompletionSaving] = useState(false);
-  const [completionError,   setCompletionError]  = useState('');
-
-  // Task detail modal
-  const [detailTask,     setDetailTask]     = useState<Task | null>(null);
-  const [taskEntries,    setTaskEntries]    = useState<Entry[]>([]);
-  const [taskEntLoading, setTaskEntLoading] = useState(false);
-
   // Entry expand / emoji picker
-  const [showUpcoming,    setShowUpcoming]    = useState(false);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
@@ -387,7 +503,9 @@ export default function TodayPage() {
   const pending    = allTasks.filter((tk) => !tk.completed);
   const overdueTasks  = pending.filter((tk) => tk.dueDate && tk.dueDate <  activeDate).sort(byDue);
   const dueTodayTasks = pending.filter((tk) => tk.dueDate === activeDate).sort(byPriority);
-  const upcomingTasks = pending.filter((tk) => tk.dueDate && tk.dueDate >  activeDate).sort(byDue);
+
+  // Incomplete tasks belonging to the currently selected project (for the log form task picker)
+  const projectTasks = pending.filter((tk) => tk.projectId?._id === projectId).sort(byPriority);
 
   const load = useCallback(async () => {
     setEntriesLoading(true);
@@ -402,6 +520,9 @@ export default function TodayPage() {
   useEffect(() => {
     if (projects.length) setProjectId((id) => id || projects[0]._id);
   }, [projects]);
+
+  // Clear the linked task whenever the selected project changes (task list is project-scoped)
+  useEffect(() => { setTaskId(''); }, [projectId]);
 
   // Load quick notes for active date from localStorage
   useEffect(() => {
@@ -435,10 +556,12 @@ export default function TodayPage() {
       const entry = await api.createEntry({
         projectId, date: activeDate, description: description.trim(),
         hours: parsedHours,
+        ...(taskId ? { taskId } : {}),
       });
       setEntries((prev) => [entry, ...prev]);
       setDescription('');
       setHours('');
+      setTaskId('');
     } catch (e) {
       setError((e as Error).message);
     }
@@ -449,6 +572,29 @@ export default function TodayPage() {
     await api.deleteEntry(id);
     setEntries((prev) => prev.filter((e) => e._id !== id));
     if (editEntryId === id) setEditEntryId(null);
+  };
+
+  const openTaskModal = () => {
+    if (!projectId) { setError('Select a project first.'); return; }
+    setNewTaskTitle(''); setNewTaskDesc(''); setTaskError('');
+    setShowTaskModal(true);
+  };
+
+  const createTask = async () => {
+    if (!newTaskTitle.trim()) { setTaskError('Task name is required.'); return; }
+    setTaskSaving(true); setTaskError('');
+    try {
+      const task = await api.createTask({
+        title: newTaskTitle.trim(),
+        description: newTaskDesc.trim() || undefined,
+        projectId,
+      });
+      invalidateTasks();
+      setTaskId(task._id);      // auto-link the freshly created task
+      setShowTaskModal(false);
+    } catch (e) {
+      setTaskError((e as Error).message);
+    } finally { setTaskSaving(false); }
   };
 
   const openEditEntry = (e: Entry) => {
@@ -473,55 +619,6 @@ export default function TodayPage() {
       setEditEntryId(null);
     } catch { /* silent */ }
     finally { setEditEntrySaving(false); }
-  };
-
-  const openCompletion = (task: Task) => {
-    setCompletingTask(task);
-    setCompletionNote('');
-    setCompletionHours('');
-    setCompletionError('');
-    setCompletionProjId(task.projectId?._id || projectId || '');
-  };
-
-  const submitCompletion = async (partial: boolean) => {
-    if (!completingTask || completionSaving) return;
-    if (completionNote.trim() && !completionProjId) {
-      setCompletionError('Select a project to save the entry.');
-      return;
-    }
-    setCompletionSaving(true);
-    setCompletionError('');
-    try {
-      if (completionNote.trim() && completionProjId) {
-        const parsedHours = parseFloat(completionHours);
-        const entry = await api.createEntry({
-          projectId:   completionProjId,
-          date:        activeDate,
-          description: completionNote.trim(),
-          taskId:      completingTask._id,
-          hours:       !isNaN(parsedHours) && parsedHours > 0 ? parsedHours : null,
-        });
-        setEntries((prev) => [entry, ...prev]);
-      }
-      if (!partial) {
-        await api.updateTask(completingTask._id, { completed: true });
-        invalidateTasks();
-      }
-      setCompletingTask(null);
-    } catch (e) {
-      setCompletionError((e as Error).message);
-    }
-    finally { setCompletionSaving(false); }
-  };
-
-  const openDetail = async (task: Task) => {
-    setDetailTask(task);
-    setTaskEntries([]);
-    setTaskEntLoading(true);
-    try {
-      const entries = await api.getTaskEntries(task._id);
-      setTaskEntries(entries);
-    } finally { setTaskEntLoading(false); }
   };
 
   const insertEmoji = (emoji: string) => {
@@ -558,57 +655,6 @@ export default function TodayPage() {
   ).sort((a, b) => b.hours - a.hours || b.count - a.count);
   // Bars scale by hours when any are logged, otherwise by entry count
   const breakdownMax = Math.max(...projectBreakdown.map((p) => (totalHours > 0 ? p.hours : p.count)), 1);
-
-  const renderTask = (t: Task) => {
-    const c    = t.projectId?.color ?? PRIORITY_COLOR[t.priority];
-    const late = t.dueDate && t.dueDate < activeDate ? dayDiff(t.dueDate, activeDate) : 0;
-    const away = t.dueDate && t.dueDate > activeDate ? dayDiff(activeDate, t.dueDate) : 0;
-    return (
-      <motion.div key={t._id} layout
-        initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-        whileHover={{ x: 2 }}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, borderLeft: `3px solid ${c}`, background: `${c}08`, transition: 'background 0.2s' }}
-      >
-        <motion.button onClick={() => openCompletion(t)} title="Log progress / mark done"
-          whileHover={{ scale: 1.15, borderColor: 'rgba(34,197,94,0.6)' }} whileTap={{ scale: 0.9 }}
-          style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, background: 'rgba(255,255,255,0.04)', border: '1.5px solid rgba(255,255,255,0.2)', cursor: 'pointer', padding: 0 }}
-        />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-            {t.projectId && (
-              <span style={{ fontSize: '0.6rem', fontWeight: 800, color: t.projectId.color, textTransform: 'uppercase', letterSpacing: '0.06em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {t.projectId.name}
-              </span>
-            )}
-            {late > 0 && (
-              <span style={{ fontSize: '0.58rem', fontWeight: 800, color: '#f87171', flexShrink: 0 }}>
-                ⚠ {late}d late
-              </span>
-            )}
-            {away > 0 && (
-              <span style={{ fontSize: '0.58rem', fontWeight: 700, color: 'rgba(255,255,255,0.28)', flexShrink: 0 }}>
-                {away === 1 ? 'tomorrow' : `in ${away}d`}
-              </span>
-            )}
-          </div>
-          <motion.button onClick={() => openCompletion(t)} title="Log progress / mark done" whileHover={{ color: '#f1f5f9' }}
-            style={{ background: 'transparent', border: 'none', padding: 0, margin: 0, textAlign: 'left', fontSize: '0.83rem', color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer', minWidth: 0 }}
-          >{t.title}</motion.button>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-          {t.priority === 'high' && (
-            <span style={{ fontSize: '0.58rem', fontWeight: 800, padding: '2px 7px', borderRadius: 99, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444' }}>
-              high
-            </span>
-          )}
-          <motion.button onClick={() => openDetail(t)} title="View task details"
-            whileHover={{ scale: 1.1, color: '#93c5fd' }} whileTap={{ scale: 0.9 }}
-            style={{ width: 22, height: 22, borderRadius: 5, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', color: 'rgba(255,255,255,0.25)', fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >⊙</motion.button>
-        </div>
-      </motion.div>
-    );
-  };
 
   return (
     <AppLayout user={user}>
@@ -738,8 +784,13 @@ export default function TodayPage() {
                   </p>
                 ) : (
                   <>
-                    <div style={{ marginBottom: 12 }}>
-                      <ProjectSelect projects={activeProjects} value={projectId} onChange={setProjectId} />
+                    <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <ProjectSelect projects={activeProjects} value={projectId} onChange={setProjectId} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <TaskSelect tasks={projectTasks} value={taskId} onChange={setTaskId} onCreateNew={openTaskModal} disabled={!projectId} />
+                      </div>
                     </div>
                     <textarea
                       ref={textareaRef} rows={6} className="field"
@@ -989,75 +1040,6 @@ export default function TodayPage() {
           {/* ── RIGHT col ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Tasks — bucketed against the day being viewed */}
-          <Card delay={0.15}>
-            <CardHead
-              title="Tasks"
-              right={
-                <a href="/tasks" style={{ fontSize: '0.66rem', fontWeight: 700, color: 'rgba(255,255,255,0.3)', textDecoration: 'none' }}>
-                  View all →
-                </a>
-              }
-            />
-            <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {overdueTasks.length === 0 && dueTodayTasks.length === 0 && upcomingTasks.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px 0', color: 'rgba(255,255,255,0.15)', fontSize: '0.8rem' }}>
-                  <div style={{ fontSize: '1.4rem', marginBottom: 8 }}>✓</div>
-                  Nothing on the schedule
-                </div>
-              ) : (
-                <>
-                  {overdueTasks.length > 0 && (
-                    <TaskGroup label="Overdue" count={overdueTasks.length} color="#ef4444">
-                      {overdueTasks.map((t) => renderTask(t))}
-                    </TaskGroup>
-                  )}
-                  {dueTodayTasks.length > 0 ? (
-                    <TaskGroup label={isToday ? 'Due today' : `Due ${shortDate(activeDate)}`} count={dueTodayTasks.length} color="#f59e0b">
-                      {dueTodayTasks.map((t) => renderTask(t))}
-                    </TaskGroup>
-                  ) : overdueTasks.length > 0 ? null : (
-                    <div style={{ textAlign: 'center', padding: '10px 0', color: 'rgba(255,255,255,0.18)', fontSize: '0.78rem' }}>
-                      Nothing due {isToday ? 'today' : 'this day'}
-                    </div>
-                  )}
-                  {upcomingTasks.length > 0 && (
-                    <div>
-                      <motion.button
-                        onClick={() => setShowUpcoming((v) => !v)}
-                        whileHover={{ color: 'rgba(255,255,255,0.5)' }}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-                          background: 'none', border: 'none', padding: '2px 0 8px', cursor: 'pointer',
-                          fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase',
-                          color: 'rgba(255,255,255,0.28)',
-                        }}
-                      >
-                        <span style={{ fontSize: '0.55rem', transition: 'transform 0.15s', transform: showUpcoming ? 'rotate(90deg)' : 'none' }}>▶</span>
-                        Upcoming
-                        <span style={{ color: 'rgba(255,255,255,0.2)' }}>{upcomingTasks.length}</span>
-                      </motion.button>
-                      <AnimatePresence initial={false}>
-                        {showUpcoming && (
-                          <motion.div
-                            key="upcoming"
-                            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-                            transition={{ duration: 0.2, ease: 'easeInOut' }}
-                            style={{ overflow: 'hidden' }}
-                          >
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              {upcomingTasks.slice(0, 5).map((t) => renderTask(t))}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </Card>
-
           {/* ── Time by project ── */}
           {projectBreakdown.length > 0 && (
             <Card delay={0.2}>
@@ -1178,264 +1160,60 @@ export default function TodayPage() {
         </div>{/* end grid */}
       </div>
 
-      {/* ── Completion Modal ── */}
-      <AnimatePresence>
-        {completingTask && (
-          <motion.div
-            key="completion-backdrop"
-            variants={backdropVariants}
-            initial="hidden"
-            animate="show"
-            exit="exit"
-            onClick={() => { if (!completionSaving) setCompletingTask(null); }}
-            style={{
-              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
-              zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-            }}
+      {/* ── Create Task Modal ── */}
+      {showTaskModal && (
+        <Portal>
+          <div
+            onClick={() => !taskSaving && setShowTaskModal(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           >
             <motion.div
-              key="completion-modal"
-              variants={modalVariants}
-              initial="hidden"
-              animate="show"
-              exit="exit"
-              onClick={(ev) => ev.stopPropagation()}
-              style={{
-                background: '#0d0f1c',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 20, padding: 24, maxWidth: 440, width: '100%',
-                boxShadow: '0 25px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(245,158,11,0.05)',
-              }}
+              initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: '#0d0f1c', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
             >
-              <div style={{
-                fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em',
-                color: 'rgba(255,255,255,0.22)', textTransform: 'uppercase', marginBottom: 5,
-              }}>
-                Log Progress
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em', color: '#f59e0b', textTransform: 'uppercase' }}>New Task</div>
+                <button onClick={() => setShowTaskModal(false)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, width: 28, height: 28, color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem', cursor: 'pointer', lineHeight: 1 }}>✕</button>
               </div>
-              <h3 style={{ color: '#f1f5f9', fontSize: '1rem', fontWeight: 700, margin: '0 0 14px', lineHeight: 1.4 }}>
-                {completingTask.title}
-              </h3>
+              {selProj && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, margin: '2px 0 16px' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: selProj.color, boxShadow: `0 0 8px ${selProj.color}88` }} />
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: selProj.color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{selProj.name}</span>
+                </div>
+              )}
 
-              {/* Project selector */}
-              <div style={{ marginBottom: 14 }}>
-                <ProjectSelect
-                  projects={activeProjects}
-                  value={completionProjId}
-                  onChange={(id) => { setCompletionProjId(id); setCompletionError(''); }}
-                />
-              </div>
-
-              <textarea
-                rows={3} autoFocus
+              <input
+                autoFocus
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') createTask(); }}
+                placeholder="Task name"
                 className="field"
-                style={{ resize: 'none', borderRadius: 10, fontFamily: 'inherit', fontSize: '0.875rem', lineHeight: 1.6, marginBottom: 12 }}
-                placeholder="What did you accomplish? (optional — skip to just mark done)"
-                value={completionNote}
-                onChange={(ev) => setCompletionNote(ev.target.value)}
-                onKeyDown={(ev) => { if (ev.key === 'Escape' && !completionSaving) setCompletingTask(null); }}
+                style={{ width: '100%', boxSizing: 'border-box', marginBottom: 10, fontSize: '0.9rem', fontWeight: 600 }}
+              />
+              <textarea
+                rows={4}
+                value={newTaskDesc}
+                onChange={(e) => setNewTaskDesc(e.target.value)}
+                placeholder="Description (optional)"
+                className="field"
+                style={{ width: '100%', boxSizing: 'border-box', resize: 'none', fontFamily: 'inherit', fontSize: '0.85rem', lineHeight: 1.55 }}
               />
 
-              {/* Hours */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 0, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, overflow: 'hidden' }}>
-                  <span style={{ padding: '6px 10px', fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)', borderRight: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap' }}>⏱ hrs spent</span>
-                  <input
-                    type="number"
-                    min="0.25" max="24" step="0.25"
-                    placeholder="—"
-                    value={completionHours}
-                    onChange={(ev) => setCompletionHours(ev.target.value)}
-                    style={{
-                      width: 60, background: 'transparent', border: 'none', outline: 'none',
-                      color: completionHours ? '#f1f5f9' : 'rgba(255,255,255,0.25)',
-                      fontSize: '0.82rem', fontWeight: 600, padding: '6px 10px',
-                      fontFamily: 'inherit', textAlign: 'center',
-                    }}
-                  />
-                </div>
-                <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.2)' }}>optional</span>
-              </div>
+              {taskError && <p style={{ color: '#f87171', fontSize: '0.78rem', margin: '10px 0 0' }}>{taskError}</p>}
 
-              <AnimatePresence>
-                {completionError && (
-                  <motion.p
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    style={{ color: '#f87171', fontSize: '0.78rem', marginBottom: 12 }}
-                  >{completionError}</motion.p>
-                )}
-              </AnimatePresence>
-
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                <motion.button
-                  onClick={() => setCompletingTask(null)}
-                  disabled={completionSaving}
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.96 }}
-                  style={{
-                    padding: '7px 14px', borderRadius: 9,
-                    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                    color: 'rgba(255,255,255,0.35)', fontSize: '0.78rem', cursor: 'pointer',
-                  }}
-                >Cancel</motion.button>
-                <motion.button
-                  onClick={() => submitCompletion(true)}
-                  disabled={completionSaving || !completionNote.trim()}
-                  whileHover={!completionNote.trim() ? {} : { scale: 1.04 }}
-                  whileTap={{ scale: 0.96 }}
-                  style={{
-                    padding: '7px 16px', borderRadius: 9,
-                    background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.22)',
-                    color: '#93c5fd', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
-                    opacity: !completionNote.trim() ? 0.35 : 1,
-                    transition: 'opacity 0.15s',
-                  }}
-                >Save entry</motion.button>
-                <motion.button
-                  onClick={() => submitCompletion(false)}
-                  disabled={completionSaving}
-                  whileHover={{ scale: 1.04, boxShadow: '0 0 16px rgba(34,197,94,0.2)' }}
-                  whileTap={{ scale: 0.96 }}
-                  style={{
-                    padding: '7px 16px', borderRadius: 9,
-                    background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.22)',
-                    color: '#4ade80', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
-                  }}
-                >{completionSaving ? '…' : 'Mark done ✓'}</motion.button>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}>
+                <button onClick={() => setShowTaskModal(false)} style={{ padding: '8px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.45)', fontSize: '0.85rem', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                <button className="btn-accent" onClick={createTask} disabled={taskSaving || !newTaskTitle.trim()} style={{ padding: '8px 20px', opacity: (taskSaving || !newTaskTitle.trim()) ? 0.5 : 1 }}>
+                  {taskSaving ? 'Creating…' : 'Create task'}
+                </button>
               </div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </Portal>
+      )}
 
-      {/* ── Task Detail Modal ── */}
-      <AnimatePresence>
-        {detailTask && (
-          <motion.div
-            key="detail-backdrop"
-            variants={backdropVariants}
-            initial="hidden"
-            animate="show"
-            exit="exit"
-            onClick={() => setDetailTask(null)}
-            style={{
-              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
-              zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-            }}
-          >
-            <motion.div
-              key="detail-modal"
-              variants={modalVariants}
-              initial="hidden"
-              animate="show"
-              exit="exit"
-              onClick={(ev) => ev.stopPropagation()}
-              style={{
-                background: '#0d0f1c',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 20, padding: 24, maxWidth: 480, width: '100%',
-                maxHeight: '80vh', overflow: 'auto',
-                boxShadow: '0 25px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(96,165,250,0.05)',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                <div style={{
-                  fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em',
-                  color: 'rgba(255,255,255,0.22)', textTransform: 'uppercase',
-                }}>Task Details</div>
-                <motion.button
-                  onClick={() => setDetailTask(null)}
-                  whileHover={{ scale: 1.15, color: '#f87171' }}
-                  whileTap={{ scale: 0.9 }}
-                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', fontSize: '1rem', cursor: 'pointer', padding: 0, lineHeight: 1 }}
-                >✕</motion.button>
-              </div>
-              <h3 style={{ color: '#f1f5f9', fontSize: '1.05rem', fontWeight: 700, margin: '4px 0 14px', lineHeight: 1.4 }}>
-                {detailTask.title}
-              </h3>
-
-              {detailTask.description && (
-                <p style={{ color: 'rgba(255,255,255,0.42)', fontSize: '0.85rem', margin: '0 0 16px', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                  {detailTask.description}
-                </p>
-              )}
-
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 22 }}>
-                {detailTask.projectId && (
-                  <span style={{
-                    fontSize: '0.7rem', fontWeight: 700, color: detailTask.projectId.color,
-                    padding: '3px 9px', borderRadius: 99,
-                    background: detailTask.projectId.color + '18',
-                    border: `1px solid ${detailTask.projectId.color}30`,
-                  }}>
-                    {detailTask.projectId.name}
-                  </span>
-                )}
-                <span style={{
-                  fontSize: '0.7rem', fontWeight: 600, padding: '3px 9px', borderRadius: 99,
-                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                  color: PRIORITY_COLOR[detailTask.priority],
-                }}>
-                  {detailTask.priority} priority
-                </span>
-                {detailTask.dueDate && (
-                  <span style={{
-                    fontSize: '0.7rem', fontWeight: 600, padding: '3px 9px', borderRadius: 99,
-                    background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.15)', color: '#93c5fd',
-                  }}>
-                    Deadline: {formatDate(detailTask.dueDate)}
-                  </span>
-                )}
-              </div>
-
-              <div style={{
-                fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em',
-                color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', marginBottom: 10,
-              }}>
-                Progress Log
-              </div>
-              {taskEntLoading ? (
-                <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.8rem', textAlign: 'center', padding: '20px 0' }}>Loading…</div>
-              ) : taskEntries.length === 0 ? (
-                <div style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.82rem', textAlign: 'center', padding: '20px 0' }}>
-                  No progress logged yet. Click the task or checkbox in Today to log your first entry.
-                </div>
-              ) : (
-                <motion.div
-                  variants={listVariants}
-                  initial="hidden"
-                  animate="show"
-                  style={{ display: 'flex', flexDirection: 'column', gap: 7 }}
-                >
-                  {taskEntries.map((e) => (
-                    <motion.div
-                      key={e._id}
-                      variants={itemVariants}
-                      style={{
-                        background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
-                        borderRadius: 10, padding: '10px 14px',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.25)' }}>{formatDate(e.date)}</span>
-                        {e.projectId && (
-                          <span style={{
-                            fontSize: '0.62rem', fontWeight: 700, color: e.projectId.color,
-                            textTransform: 'uppercase', letterSpacing: '0.06em',
-                          }}>{e.projectId.name}</span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{renderRichText(e.description)}</div>
-                    </motion.div>
-                  ))}
-                </motion.div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </AppLayout>
   );
 }
