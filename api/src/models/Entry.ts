@@ -18,7 +18,7 @@ const entrySchema = new Schema<IEntry>(
     projectId:   { type: Schema.Types.ObjectId, ref: 'Project', required: true },
     taskId:      { type: Schema.Types.ObjectId, ref: 'Task',    default: null  },
     date:        { type: String, required: true },
-    description: { type: String, required: true },
+    description: { type: String, default: '' },
     hours:       { type: Number, default: null },
   },
   { timestamps: true }

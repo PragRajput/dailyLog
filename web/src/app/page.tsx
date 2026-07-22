@@ -428,13 +428,13 @@ export default function TodayPage() {
 
   const addEntry = async () => {
     if (!projectId) { setError('Select a project first.'); return; }
-    if (!description.trim()) { setError('Add a description before saving.'); return; }
+    const parsedHours = parseFloat(hours);
+    if (isNaN(parsedHours) || parsedHours <= 0) { setError('Enter the hours spent.'); return; }
     setSaving(true); setError('');
     try {
-      const parsedHours = parseFloat(hours);
       const entry = await api.createEntry({
         projectId, date: activeDate, description: description.trim(),
-        hours: !isNaN(parsedHours) && parsedHours > 0 ? parsedHours : null,
+        hours: parsedHours,
       });
       setEntries((prev) => [entry, ...prev]);
       setDescription('');
@@ -459,14 +459,15 @@ export default function TodayPage() {
   };
 
   const saveEditEntry = async () => {
-    if (!editEntryDesc.trim() || !editEntryId) return;
+    if (!editEntryId) return;
+    const parsedHours = parseFloat(editEntryHours);
+    if (isNaN(parsedHours) || parsedHours <= 0) return;
     setEditEntrySaving(true);
     try {
-      const parsedHours = parseFloat(editEntryHours);
       const updated = await api.updateEntry(editEntryId, {
         description: editEntryDesc.trim(),
         projectId:   editEntryProj || undefined,
-        hours:       !isNaN(parsedHours) && parsedHours > 0 ? parsedHours : null,
+        hours:       parsedHours,
       });
       setEntries((prev) => prev.map((e) => e._id === editEntryId ? updated : e));
       setEditEntryId(null);
@@ -743,7 +744,7 @@ export default function TodayPage() {
                     <textarea
                       ref={textareaRef} rows={6} className="field"
                       style={{ resize: 'none', borderRadius: 12, marginBottom: 8, fontFamily: 'inherit', fontSize: '0.875rem', lineHeight: 1.6 }}
-                      placeholder={selProj ? `What did you work on for ${selProj.name}?` : 'What did you work on?'}
+                      placeholder={selProj ? `What did you work on for ${selProj.name}? (optional)` : 'What did you work on? (optional)'}
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addEntry(); }}
@@ -816,7 +817,7 @@ export default function TodayPage() {
 
                       <motion.button className="btn-accent" onClick={addEntry} disabled={saving}
                         whileHover={!saving ? { scale: 1.04, y: -1 } : {}} whileTap={{ scale: 0.96 }}
-                        style={{ minWidth: 100, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', opacity: (!description.trim() || !projectId) ? 0.45 : 1, transition: 'opacity 0.15s' }}
+                        style={{ minWidth: 100, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', opacity: (!projectId || !hours || parseFloat(hours) <= 0) ? 0.45 : 1, transition: 'opacity 0.15s' }}
                       >
                         {saving ? <span style={{ opacity: 0.7 }}>Saving…</span> : <><span style={{ fontSize: '0.9rem' }}>+</span> Add Entry</>}
                       </motion.button>
@@ -898,7 +899,9 @@ export default function TodayPage() {
                                       </span>
                                     )}
                                   </div>
-                                  {(() => {
+                                  {!e.description.trim() ? (
+                                    <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.25)', fontStyle: 'italic' }}>No description</div>
+                                  ) : (() => {
                                     const expanded = expandedEntries.has(e._id);
                                     const long = needsExpand(e.description);
                                     return (
@@ -964,7 +967,7 @@ export default function TodayPage() {
                                       <motion.button onClick={() => setEditEntryId(null)} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                                         style={{ padding: '5px 13px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.35)', fontSize: '0.78rem', cursor: 'pointer' }}
                                       >Cancel</motion.button>
-                                      <motion.button className="btn-accent" onClick={saveEditEntry} disabled={editEntrySaving || !editEntryDesc.trim()}
+                                      <motion.button className="btn-accent" onClick={saveEditEntry} disabled={editEntrySaving || !editEntryHours || parseFloat(editEntryHours) <= 0}
                                         whileHover={!editEntrySaving && editEntryDesc.trim() ? { scale: 1.04 } : {}} whileTap={{ scale: 0.96 }} style={{ padding: '5px 16px' }}
                                       >{editEntrySaving ? 'Saving…' : 'Save'}</motion.button>
                                     </div>

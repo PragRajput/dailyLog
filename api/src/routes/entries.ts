@@ -60,12 +60,12 @@ router.post('/', async (req: Request, res: Response) => {
     const { projectId, date, description, taskId, hours } = req.body as {
       projectId: string; date: string; description: string; taskId?: string; hours?: number;
     };
-    if (!projectId || !date || !description?.trim()) {
-      res.status(400).json({ error: 'projectId, date, and description are required' });
+    if (!projectId || !date) {
+      res.status(400).json({ error: 'projectId and date are required' });
       return;
     }
     const entry = await Entry.create({
-      userId: req.user!._id, projectId, date, description: description.trim(),
+      userId: req.user!._id, projectId, date, description: description?.trim() ?? '',
       ...(taskId ? { taskId } : {}),
       ...(hours != null && hours > 0 ? { hours } : {}),
     });
