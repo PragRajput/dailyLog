@@ -70,7 +70,7 @@ export default function CalendarPage() {
     invalidateTasks();
   }
 
-  if (loading || !user || calLoading || tasksLoading) return <Loader />;
+  if (loading || !user) return <Loader />;
 
   return (
     <AppLayout user={user}>

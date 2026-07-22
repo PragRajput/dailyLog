@@ -7,15 +7,15 @@ import { api } from '@/lib/api';
 import ChatWidget from './ChatWidget';
 
 const NAV = [
-  { href: '/',         label: 'Today',    icon: '✦' },
-  { href: '/calendar', label: 'Calendar', icon: '◫' },
-  { href: '/tasks',    label: 'Tasks',    icon: '✓' },
-  { href: '/projects', label: 'Projects', icon: '⬡' },
-  { href: '/summary',  label: 'Summary',  icon: '✧' },
+  { href: '/',         label: 'Dashboard', icon: '◈' },
+  { href: '/calendar', label: 'Calendar',  icon: '◫' },
+  { href: '/tasks',    label: 'Tasks',     icon: '✓' },
+  { href: '/projects', label: 'Projects',  icon: '⬡' },
+  { href: '/summary',  label: 'Summary',   icon: '✧' },
 ];
 
 const PAGE_TITLES: Record<string, string> = {
-  '/':          'Today',
+  '/':          'Dashboard',
   '/calendar':  'Calendar',
   '/tasks':     'Tasks',
   '/projects':  'Projects',
@@ -116,12 +116,12 @@ export default function AppLayout({ user: initialUser, children }: { user: User;
 
       {/* ── Top Header ── */}
       <header style={{
-        height: 56, flexShrink: 0,
+        height: 72, flexShrink: 0,
         background: 'rgba(9,10,21,0.94)',
         borderBottom: '1px solid rgba(255,255,255,0.055)',
         backdropFilter: 'blur(16px)',
         display: 'flex', alignItems: 'center',
-        padding: '0 20px 0 0',
+        padding: '0 24px 0 0',
         zIndex: 20,
         boxShadow: '0 1px 0 rgba(255,255,255,0.03)',
       }}>
@@ -129,31 +129,41 @@ export default function AppLayout({ user: initialUser, children }: { user: User;
         <div style={{
           width: 220, flexShrink: 0, height: '100%',
           padding: '0 20px',
-          display: 'flex', alignItems: 'center', gap: 10,
+          display: 'flex', alignItems: 'center', gap: 12,
           borderRight: '1px solid rgba(255,255,255,0.055)',
         }}>
+          {/* Brand mark */}
           <div style={{
-            fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-0.03em',
+            width: 38, height: 38, flexShrink: 0, borderRadius: 11,
             background: 'linear-gradient(135deg,#f59e0b,#f97316)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          }}>DailyLog</div>
-          <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.18)', letterSpacing: '0.1em', marginTop: 1 }}>
-            WORK TRACKER
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '1.15rem', fontWeight: 800, color: '#0a0b14',
+            boxShadow: '0 4px 14px rgba(245,158,11,0.3)',
+          }}>D</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div style={{
+              fontSize: '1.35rem', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1,
+              background: 'linear-gradient(135deg,#f59e0b,#f97316)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            }}>DailyLog</div>
+            <div style={{ fontSize: '0.56rem', fontWeight: 600, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.16em' }}>
+              WORK TRACKER
+            </div>
           </div>
         </div>
 
         {/* Page title */}
-        <div style={{ flex: 1, padding: '0 20px' }}>
+        <div style={{ flex: 1, padding: '0 24px' }}>
           {pathname === '/' ? (
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
               <span style={{
-                fontSize: '0.9rem', fontWeight: 700,
-                color: 'rgba(255,255,255,0.38)', letterSpacing: '0.01em',
+                fontSize: '1.1rem', fontWeight: 700,
+                color: 'rgba(255,255,255,0.4)', letterSpacing: '0.01em',
               }}>
                 {greet()},
               </span>
               <span style={{
-                fontSize: '1rem', fontWeight: 800, letterSpacing: '-0.01em',
+                fontSize: '1.2rem', fontWeight: 800, letterSpacing: '-0.01em',
                 background: 'linear-gradient(90deg, #f59e0b, #f97316)',
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               }}>
@@ -161,7 +171,7 @@ export default function AppLayout({ user: initialUser, children }: { user: User;
               </span>
             </div>
           ) : (
-            <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'rgba(255,255,255,0.65)', letterSpacing: '0.01em' }}>
+            <span style={{ fontSize: '1.05rem', fontWeight: 700, color: 'rgba(255,255,255,0.7)', letterSpacing: '0.01em' }}>
               {pageTitle}
             </span>
           )}
@@ -175,14 +185,14 @@ export default function AppLayout({ user: initialUser, children }: { user: User;
               display: 'flex', alignItems: 'center', gap: 9,
               background: dropdown ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
               border: `1px solid ${dropdown ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.07)'}`,
-              borderRadius: 30, padding: '5px 12px 5px 6px',
+              borderRadius: 30, padding: '5px 14px 5px 6px',
               cursor: 'pointer', transition: 'all 0.15s',
             }}
             onMouseEnter={(e) => { if (!dropdown) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.12)'; } }}
             onMouseLeave={(e) => { if (!dropdown) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'; } }}
           >
-            <Avatar src={user.avatar} name={user.name} size={28} />
-            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#e2e8f0', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <Avatar src={user.avatar} name={user.name} size={34} />
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#e2e8f0', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user.name}
             </span>
             <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.25)', marginLeft: 2 }}>
@@ -306,26 +316,21 @@ export default function AppLayout({ user: initialUser, children }: { user: User;
           display: 'flex', flexDirection: 'column',
         }}>
           <nav style={{ flex: 1, padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {NAV.map(({ href, label, icon }) => {
-              const active = pathname === href;
-              return (
-                <Link key={href} href={href} style={{ textDecoration: 'none' }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 9,
-                    padding: '8px 12px', borderRadius: 9,
-                    background: active ? 'rgba(245,158,11,0.1)' : 'transparent',
-                    border: `1px solid ${active ? 'rgba(245,158,11,0.18)' : 'transparent'}`,
-                    color: active ? '#f59e0b' : 'rgba(255,255,255,0.35)',
-                    fontSize: '0.83rem', fontWeight: active ? 700 : 500,
-                    transition: 'all 0.15s',
-                    boxShadow: active ? '0 0 14px rgba(245,158,11,0.07)' : 'none',
-                  }}>
-                    <span style={{ fontSize: '0.78rem', width: 16, textAlign: 'center' }}>{icon}</span>
-                    {label}
-                  </div>
-                </Link>
-              );
-            })}
+            <div style={{
+              fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.14em',
+              textTransform: 'uppercase', color: 'rgba(255,255,255,0.16)',
+              padding: '0 12px', marginBottom: 8,
+            }}>
+              Workspace
+            </div>
+            {NAV.map(({ href, label, icon }) => (
+              <Link key={href} href={href} style={{ textDecoration: 'none' }}>
+                <div className={`nav-item${pathname === href ? ' active' : ''}`}>
+                  <span className="nav-icon">{icon}</span>
+                  {label}
+                </div>
+              </Link>
+            ))}
           </nav>
         </aside>
 

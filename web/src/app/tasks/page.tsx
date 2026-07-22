@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import Loader from '@/components/Loader';
 import { useUser } from '@/lib/useUser';
@@ -59,6 +59,94 @@ function ProjectPicker({ projects, value, onChange }: { projects: Project[]; val
           {p.name}
         </button>
       ))}
+    </div>
+  );
+}
+
+/** Compact dropdown to filter tasks by project (All, or one). */
+function ProjectFilterDropdown({ projects, value, onChange, counts, total }: {
+  projects: Project[]; value: string; onChange: (v: string) => void;
+  counts: Record<string, number>; total: number;
+}) {
+  const [open, setOpen]   = useState(false);
+  const [query, setQuery] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const sel = projects.find((p) => p._id === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  useEffect(() => { if (!open) setQuery(''); }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = q ? projects.filter((p) => p.name.toLowerCase().includes(q)) : projects;
+  const showSearch = projects.length > 7;
+
+  const Row = ({ id, name, color, count }: { id: string; name: string; color?: string; count: number }) => {
+    const active = value === id;
+    return (
+      <button type="button" onClick={() => { onChange(id); setOpen(false); }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+          padding: '7px 10px', borderRadius: 8, cursor: 'pointer', border: 'none',
+          background: active ? (color ? color + '18' : 'rgba(255,255,255,0.06)') : 'transparent',
+          textAlign: 'left', fontFamily: 'inherit',
+        }}
+        onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)'; }}
+        onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+      >
+        <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: color ?? 'rgba(255,255,255,0.3)' }} />
+        <span style={{ flex: 1, minWidth: 0, fontSize: '0.8rem', fontWeight: active ? 700 : 500, color: active ? (color ?? '#f1f5f9') : '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>{count}</span>
+        {active && <span style={{ fontSize: '0.7rem', color: color ?? '#f1f5f9', flexShrink: 0 }}>✓</span>}
+      </button>
+    );
+  };
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setOpen((v) => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, minWidth: 190,
+          background: 'rgba(255,255,255,0.03)',
+          border: `1px solid ${open ? 'rgba(245,158,11,0.35)' : sel ? sel.color + '50' : 'rgba(255,255,255,0.08)'}`,
+          borderRadius: 9, padding: '7px 12px', cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >
+        <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: sel?.color ?? 'rgba(255,255,255,0.3)' }} />
+        <span style={{ flex: 1, textAlign: 'left', fontSize: '0.78rem', fontWeight: 600, color: sel ? sel.color : 'rgba(255,255,255,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {sel ? sel.name : 'All projects'}
+        </span>
+        <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>{sel ? counts[sel._id] ?? 0 : total}</span>
+        <span style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.3)', flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50, width: 240,
+          background: 'rgba(13,15,28,0.98)', backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255,255,255,0.12)', borderRadius: 11,
+          boxShadow: '0 16px 40px rgba(0,0,0,0.55)', overflow: 'hidden',
+        }}>
+          {showSearch && (
+            <div style={{ padding: 7, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search projects…"
+                style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, padding: '6px 10px', color: '#f1f5f9', fontSize: '0.78rem', outline: 'none', fontFamily: 'inherit' }}
+              />
+            </div>
+          )}
+          <div style={{ maxHeight: 260, overflowY: 'auto', padding: 5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {!q && <Row id="" name="All projects" count={total} />}
+            {filtered.map((p) => <Row key={p._id} id={p._id} name={p.name} color={p.color} count={counts[p._id] ?? 0} />)}
+            {q && filtered.length === 0 && (
+              <div style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.75rem', color: 'rgba(255,255,255,0.2)' }}>No match</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -180,14 +268,23 @@ export default function TasksPage() {
     finally { setEditSaving(false); }
   };
 
-  if (loading || !user || tasksLoading || projectsLoading) return <Loader />;
+  if (loading || !user) return <Loader />;
 
+  const dataLoading = tasksLoading || projectsLoading;
   const pending  = tasks.filter((t) => !t.completed);
   const done     = tasks.filter((t) => t.completed);
   const overdue  = pending.filter((t) => isOverdue(t.dueDate));
-  let displayed  = filter === 'all' ? tasks : filter === 'pending' ? pending : done;
+  const statusScoped = filter === 'all' ? tasks : filter === 'pending' ? pending : done;
+  let displayed  = statusScoped;
   if (projFilter) displayed = displayed.filter((t) => t.projectId?._id === projFilter);
   const today    = new Date().toLocaleDateString('sv');
+
+  // Task count per project within the current status tab (drives the filter dropdown badges)
+  const projTaskCounts = statusScoped.reduce<Record<string, number>>((acc, t) => {
+    const id = t.projectId?._id;
+    if (id) acc[id] = (acc[id] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <AppLayout user={user}>
@@ -271,12 +368,12 @@ export default function TasksPage() {
         )}
 
         {/* ── Filters ── */}
-        <div style={{ marginBottom: 18 }}>
+        <div style={{ marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div style={{
             display: 'inline-flex',
             background: 'rgba(255,255,255,0.03)',
             border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 12, padding: 3, gap: 2, marginBottom: 10,
+            borderRadius: 12, padding: 3, gap: 2,
           }}>
             {STATUS_TABS.map(({ val, label }) => {
               const count = val === 'pending' ? pending.length : val === 'done' ? done.length : tasks.length;
@@ -303,39 +400,39 @@ export default function TasksPage() {
             })}
           </div>
           {projects.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.06em', textTransform: 'uppercase', marginRight: 2 }}>Project</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Project</span>
+              <ProjectFilterDropdown
+                projects={projects}
+                value={projFilter}
+                onChange={setProjFilter}
+                counts={projTaskCounts}
+                total={statusScoped.length}
+              />
               {projFilter && (
                 <button onClick={() => setProjFilter('')} style={{
-                  padding: '3px 9px', borderRadius: 7,
-                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                  color: 'rgba(255,255,255,0.4)', fontSize: '0.68rem', cursor: 'pointer',
-                }}>All ✕</button>
+                  padding: '6px 10px', borderRadius: 8,
+                  background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+                  color: 'rgba(255,255,255,0.4)', fontSize: '0.72rem', cursor: 'pointer',
+                }}>Clear ✕</button>
               )}
-              {projects.map((p) => {
-                const active = projFilter === p._id;
-                return (
-                  <button key={p._id} onClick={() => setProjFilter(active ? '' : p._id)} style={{
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    padding: '3px 10px', borderRadius: 7,
-                    background: active ? `${p.color}18` : 'rgba(255,255,255,0.02)',
-                    border: `1px solid ${active ? `${p.color}50` : 'rgba(255,255,255,0.07)'}`,
-                    color: active ? p.color : 'rgba(255,255,255,0.3)',
-                    fontSize: '0.72rem', cursor: 'pointer', transition: 'all 0.15s',
-                    boxShadow: active ? `0 0 8px ${p.color}18` : 'none',
-                  }}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
-                    {p.name}
-                  </button>
-                );
-              })}
             </div>
           )}
         </div>
 
         {/* ── Task list ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {displayed.length === 0 ? (
+          {dataLoading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} style={{
+                height: 64, borderRadius: 14,
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.05)',
+                animation: 'pulse 1.4s ease-in-out infinite',
+                animationDelay: `${i * 0.1}s`,
+              }} />
+            ))
+          ) : displayed.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(255,255,255,0.15)', fontSize: '0.85rem' }}>
               <div style={{ fontSize: '1.8rem', marginBottom: 8 }}>✓</div>
               {filter === 'done' ? 'No completed tasks yet.' : 'No tasks. Add one above!'}

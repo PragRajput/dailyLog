@@ -48,6 +48,8 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
 app.use('/auth',          authRouter);
 app.use('/api/projects',  projectsRouter);
 app.use('/api/entries',   entriesRouter);

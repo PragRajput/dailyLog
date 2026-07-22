@@ -9,15 +9,29 @@ export const KEYS = {
 };
 
 export function useProjects() {
-  return useQuery({ queryKey: KEYS.projects, queryFn: api.getProjects });
+  return useQuery({ queryKey: KEYS.projects, queryFn: api.getProjects, staleTime: 5 * 60 * 1000 });
 }
 
 export function useTasks() {
-  return useQuery({ queryKey: KEYS.tasks, queryFn: api.getTasks });
+  return useQuery({ queryKey: KEYS.tasks, queryFn: api.getTasks, staleTime: 5 * 60 * 1000 });
 }
 
 export function useEntries(date: string) {
   return useQuery({ queryKey: KEYS.entries(date), queryFn: () => api.getEntries({ date }) });
+}
+
+/** All entries in an optional date range (omit both for all-time). Used for project reporting. */
+export function useEntriesRange(startDate?: string, endDate?: string) {
+  return useQuery({
+    queryKey: ['entries-range', startDate ?? 'all', endDate ?? 'all'],
+    queryFn: () => {
+      const params: Record<string, string> = {};
+      if (startDate) params.startDate = startDate;
+      if (endDate)   params.endDate   = endDate;
+      return api.getEntries(params);
+    },
+    staleTime: 60 * 1000,
+  });
 }
 
 export function useCalendar(year: number, month: number) {

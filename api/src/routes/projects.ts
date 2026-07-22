@@ -35,8 +35,12 @@ router.patch('/:id', async (req: Request, res: Response) => {
   try {
     const project = await Project.findOne({ _id: req.params.id, userId: req.user!._id });
     if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
-    const { archived } = req.body as { archived?: boolean };
+    const { archived, completed } = req.body as { archived?: boolean; completed?: boolean };
     if (typeof archived === 'boolean') project.archived = archived;
+    if (typeof completed === 'boolean') {
+      project.completed = completed;
+      project.completedAt = completed ? new Date() : undefined;
+    }
     await project.save();
     res.json(project);
   } catch (err) {

@@ -6,11 +6,13 @@ export interface User {
 }
 
 export interface Project {
-  _id:       string;
-  name:      string;
-  color:     string;
-  archived:  boolean;
-  createdAt: string;
+  _id:         string;
+  name:        string;
+  color:       string;
+  archived:    boolean;
+  completed?:  boolean;
+  completedAt?: string;
+  createdAt:   string;
 }
 
 export interface Entry {
