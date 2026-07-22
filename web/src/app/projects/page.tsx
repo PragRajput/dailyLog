@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import AppLayout from '@/components/AppLayout';
 import Loader from '@/components/Loader';
+import Portal from '@/components/Portal';
 import { useUser } from '@/lib/useUser';
 import { api } from '@/lib/api';
 import { useProjects, useEntriesRange, useInvalidate } from '@/lib/queries';
@@ -159,10 +160,21 @@ export default function ProjectsPage() {
   const [error,          setError]          = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Inline rename inside detail modal
+  const [renaming,     setRenaming]     = useState(false);
+  const [renameValue,  setRenameValue]  = useState('');
+  const [renameColor,  setRenameColor]  = useState(PALETTE[0]);
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [renameError,  setRenameError]  = useState('');
+  const renameRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (showModal) setTimeout(() => inputRef.current?.focus(), 50);
     else { setName(''); setColor(PALETTE[0]); setError(''); }
   }, [showModal]);
+
+  // Reset inline rename whenever the detail modal changes/closes
+  useEffect(() => { setRenaming(false); setRenameError(''); }, [detailProject?._id]);
 
   const create = async () => {
     if (!name.trim()) return;
@@ -198,6 +210,30 @@ export default function ProjectsPage() {
       setConfirmDelete(null);
     } catch (e) { setDeleteError((e as Error).message); }
     finally { setDeleting(false); }
+  };
+
+  const startRename = () => {
+    if (!detailProject) return;
+    setRenameValue(detailProject.name);
+    setRenameColor(detailProject.color);
+    setRenameError('');
+    setRenaming(true);
+    setTimeout(() => renameRef.current?.focus(), 50);
+  };
+
+  const saveRename = async () => {
+    if (!detailProject) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed) { setRenameError('Name cannot be empty'); return; }
+    if (trimmed === detailProject.name && renameColor === detailProject.color) { setRenaming(false); return; }
+    setRenameSaving(true); setRenameError('');
+    try {
+      const updated = await api.updateProject(detailProject._id, { name: trimmed, color: renameColor });
+      setDetailProject(updated);
+      invalidateProjects();
+      setRenaming(false);
+    } catch (e) { setRenameError((e as Error).message); }
+    finally { setRenameSaving(false); }
   };
 
   if (loading || !user) return <Loader />;
@@ -462,44 +498,92 @@ export default function ProjectsPage() {
 
       {/* Project entries drill-down */}
       {detailProject && (
+        <Portal>
         <div
           onClick={() => setDetailProject(null)}
           style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ background: '#0d0f1c', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, width: '100%', maxWidth: 560, maxHeight: '84vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
+            style={{ background: '#0d0f1c', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, width: '100%', maxWidth: 560, height: 'min(82vh, 680px)', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 60px rgba(0,0,0,0.6)', overflow: 'hidden' }}
           >
+            {/* Accent bar */}
+            <div style={{ height: 4, flexShrink: 0, background: `linear-gradient(90deg, ${detailProject.color}, ${detailProject.color}22)` }} />
+
             {/* Modal header */}
-            <div style={{ padding: '20px 22px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                  <span style={{ width: 12, height: 12, borderRadius: '50%', background: detailProject.color, boxShadow: `0 0 10px ${detailProject.color}99`, flexShrink: 0 }} />
-                  <div style={{ minWidth: 0 }}>
-                    <h3 style={{ color: '#f1f5f9', fontSize: '1.1rem', fontWeight: 800, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{detailProject.name}</h3>
-                    <div style={{ fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.28)', marginTop: 3 }}>
-                      Log entries · {rangeLabel}
-                    </div>
+            <div style={{ padding: '20px 22px 18px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: `linear-gradient(180deg, ${detailProject.color}12, transparent)` }}>
+              {renaming ? (
+                /* ── Rename form ── */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)' }}>Rename project</div>
+                  <input
+                    ref={renameRef}
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') setRenaming(false); }}
+                    placeholder="Project name"
+                    style={{
+                      width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)',
+                      borderRadius: 10, padding: '10px 14px', color: '#f1f5f9', fontSize: '0.95rem', fontWeight: 700,
+                      outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                    {PALETTE.map((c) => (
+                      <button key={c} type="button" onClick={() => setRenameColor(c)} style={{
+                        width: 22, height: 22, borderRadius: '50%', background: c, cursor: 'pointer',
+                        border: renameColor === c ? '2px solid #fff' : '2px solid transparent',
+                        boxShadow: renameColor === c ? `0 0 8px ${c}` : 'none', padding: 0, transition: 'all 0.12s',
+                      }} />
+                    ))}
+                  </div>
+                  {renameError && <div style={{ color: '#f87171', fontSize: '0.78rem' }}>{renameError}</div>}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button onClick={() => setRenaming(false)} style={{ padding: '7px 14px', borderRadius: 9, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.45)', fontSize: '0.82rem', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                    <button onClick={saveRename} disabled={renameSaving} style={{ padding: '7px 18px', borderRadius: 9, background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.35)', color: '#f59e0b', fontSize: '0.82rem', fontWeight: 700, cursor: renameSaving ? 'not-allowed' : 'pointer', opacity: renameSaving ? 0.6 : 1, fontFamily: 'inherit' }}>{renameSaving ? 'Saving…' : 'Save'}</button>
                   </div>
                 </div>
-                <button onClick={() => setDetailProject(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', fontSize: '1.1rem', cursor: 'pointer', padding: 0, lineHeight: 1, flexShrink: 0 }}>✕</button>
-              </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+                      <span style={{ width: 13, height: 13, borderRadius: '50%', background: detailProject.color, boxShadow: `0 0 10px ${detailProject.color}99`, flexShrink: 0 }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <h3 style={{ color: '#f1f5f9', fontSize: '1.15rem', fontWeight: 800, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{detailProject.name}</h3>
+                          <button
+                            onClick={startRename}
+                            title="Rename project"
+                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.45)', fontSize: '0.8rem', flexShrink: 0, transition: 'all 0.15s', padding: 0 }}
+                            onMouseEnter={(e) => { const el = e.currentTarget; el.style.color = '#f59e0b'; el.style.borderColor = 'rgba(245,158,11,0.35)'; el.style.background = 'rgba(245,158,11,0.08)'; }}
+                            onMouseLeave={(e) => { const el = e.currentTarget; el.style.color = 'rgba(255,255,255,0.45)'; el.style.borderColor = 'rgba(255,255,255,0.1)'; el.style.background = 'rgba(255,255,255,0.05)'; }}
+                          >✎</button>
+                        </div>
+                        <div style={{ fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.28)', marginTop: 4 }}>
+                          Log entries · {rangeLabel}
+                        </div>
+                      </div>
+                    </div>
+                    <button onClick={() => setDetailProject(null)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, width: 30, height: 30, color: 'rgba(255,255,255,0.4)', fontSize: '0.95rem', cursor: 'pointer', padding: 0, lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                  </div>
 
-              {/* Totals */}
-              <div style={{ display: 'flex', gap: 18, marginTop: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                  <span style={{ fontSize: '1.25rem', fontWeight: 800, color: detailProject.color }}>{fmtHours(detailHours)}</span>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: detailProject.color, opacity: 0.7 }}>h logged</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                  <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#e2e8f0' }}>{detailEntries.length}</span>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.35)' }}>{detailEntries.length === 1 ? 'entry' : 'entries'}</span>
-                </div>
-              </div>
+                  {/* Totals */}
+                  <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, padding: '8px 14px', borderRadius: 11, background: `${detailProject.color}14`, border: `1px solid ${detailProject.color}2e` }}>
+                      <span style={{ fontSize: '1.3rem', fontWeight: 800, color: detailProject.color }}>{fmtHours(detailHours)}</span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: detailProject.color, opacity: 0.75 }}>h logged</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, padding: '8px 14px', borderRadius: 11, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <span style={{ fontSize: '1.3rem', fontWeight: 800, color: '#e2e8f0' }}>{detailEntries.length}</span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'rgba(255,255,255,0.4)' }}>{detailEntries.length === 1 ? 'entry' : 'entries'}</span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Entries list */}
-            <div style={{ padding: '14px 18px 18px', overflowY: 'auto' }}>
+            <div style={{ padding: '14px 18px 18px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
               {entriesLoading ? (
                 <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.82rem', textAlign: 'center', padding: '28px 0' }}>Loading entries…</div>
               ) : detailEntries.length === 0 ? (
@@ -530,10 +614,12 @@ export default function ProjectsPage() {
             </div>
           </div>
         </div>
+        </Portal>
       )}
 
       {/* Delete confirmation modal */}
       {confirmDelete && (
+        <Portal>
         <div
           onClick={() => { setConfirmDelete(null); setDeleteError(''); }}
           style={{
@@ -578,10 +664,12 @@ export default function ProjectsPage() {
             </div>
           </div>
         </div>
+        </Portal>
       )}
 
       {/* Create modal */}
       {showModal && (
+        <Portal>
         <div
           onClick={() => setShowModal(false)}
           style={{
@@ -655,6 +743,7 @@ export default function ProjectsPage() {
             </div>
           </div>
         </div>
+        </Portal>
       )}
     </AppLayout>
   );

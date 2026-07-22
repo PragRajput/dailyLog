@@ -35,12 +35,17 @@ router.patch('/:id', async (req: Request, res: Response) => {
   try {
     const project = await Project.findOne({ _id: req.params.id, userId: req.user!._id });
     if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
-    const { archived, completed } = req.body as { archived?: boolean; completed?: boolean };
+    const { archived, completed, name, color } = req.body as { archived?: boolean; completed?: boolean; name?: string; color?: string };
     if (typeof archived === 'boolean') project.archived = archived;
     if (typeof completed === 'boolean') {
       project.completed = completed;
       project.completedAt = completed ? new Date() : undefined;
     }
+    if (typeof name === 'string') {
+      if (!name.trim()) { res.status(400).json({ error: 'Name cannot be empty' }); return; }
+      project.name = name.trim();
+    }
+    if (typeof color === 'string' && color.trim()) project.color = color.trim();
     await project.save();
     res.json(project);
   } catch (err) {
